@@ -1,7 +1,7 @@
 package ics
 
 import (
-	"crypto/md5"
+	"crypto/sha256"
 	"fmt"
 	"time"
 )
@@ -190,10 +190,8 @@ func (e *Event) SetAlarm(alarmAfter time.Duration, callback func(*Event)) *Event
 	e.alarmCallback = callback
 	e.alarmTime = alarmAfter
 	go func() {
-		select {
-		case <-time.After(alarmAfter):
-			callback(e)
-		}
+		time.Sleep(alarmAfter)
+		callback(e)
 	}()
 	return e
 }
@@ -219,16 +217,15 @@ func (e *Event) IsWholeDay() bool {
 	return e.wholeDayEvent
 }
 
-//  generates an unique id for the event
+// generates an unique id for the event
 func (e *Event) GenerateEventId() string {
+	var toBeHashed string
 	if e.GetImportedID() != "" {
-		toBeHashed := fmt.Sprintf("%s%s%s", e.GetStart(), e.GetEnd(), e.GetImportedID())
-		return fmt.Sprintf("%x", md5.Sum(stringToByte(toBeHashed)))
+		toBeHashed = fmt.Sprintf("%s%s%s", e.GetStart(), e.GetEnd(), e.GetImportedID())
 	} else {
-		toBeHashed := fmt.Sprintf("%s%s%s%s", e.GetStart(), e.GetEnd(), e.GetSummary(), e.GetDescription())
-		return fmt.Sprintf("%x", md5.Sum(stringToByte(toBeHashed)))
+		toBeHashed = fmt.Sprintf("%s%s%s%s", e.GetStart(), e.GetEnd(), e.GetSummary(), e.GetDescription())
 	}
-
+	return fmt.Sprintf("%x", sha256.Sum256(stringToByte(toBeHashed)))
 }
 
 func (e *Event) SetCalendar(cal *Calendar) *Event {

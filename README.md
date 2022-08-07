@@ -1,52 +1,57 @@
 # ics-golang
+
 Golang ics parser
 
-## CI
-
-[![CircleCI](https://circleci.com/gh/PuloV/ics-golang.svg?style=svg)](https://circleci.com/gh/PuloV/ics-golang)
+- Forked from https://github.com/PuloV/ics-golang
 
 ## Installation
-`go get github.com/PuloV/ics-golang`
+
+`go get github.com/spiegel-im-spiegel/ics-golang`
 
 ## How to use it
+
 * Import the package:
-```sh
+```go
 import (
-	"github.com/PuloV/ics-golang"
+    "github.com/spiegel-im-spiegel/ics-golang"
 )
 ```
 * Create a new parser:
-```sh
+```go
     parser := ics.New()
 ```
 * Pass as many ics urls as you want to the input chan :
-```sh
+```go
     parserChan := parser.GetInputChan()
     parserChan <- "http://www.google.com/calendar/ical/bg.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
     parserChan <- "http://www.google.com/calendar/ical/en.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
     parserChan <- "http://www.google.com/calendar/ical/de.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
 ```
-###### * don't rely that the calendars will be parsed in this order
-* Wait for the result of the parsing :
-```sh
 
+###### * don't rely that the calendars will be parsed in this order
+
+* Wait for the result of the parsing :
+```go
     outputChan := parser.GetOutputChan()
     //  print events
-	go func() {
-		for event := range outputChan {
-			fmt.Println(event.GetImportedID())
-		}
-	}()
+    go func() {
+        for event := range outputChan {
+            fmt.Println(event.GetImportedID())
+        }
+    }()
 
-	// wait to kill the main goroute
-	parser.Wait()
+    // wait to kill the main goroute
+    parser.Wait()
 ```
+
 ###### * the data form the calendars may be mixed
 
 ## Different usage
+
 You can see diferent usage in the [ics-golang-examples](https://github.com/PuloV/ics-golang-examples) or in the test files `<filename>_test.go`
 
 ## LICENCE
+
 The MIT License (MIT)
 
 Copyright (c) 2014 Йордан Пулов

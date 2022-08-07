@@ -3,7 +3,6 @@ package ics
 import (
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strconv"
@@ -11,7 +10,7 @@ import (
 	"sync"
 	"time"
 
-	duration "github.com/channelmeter/iso8601duration"
+	duration "github.com/spiegel-im-spiegel/iso8601duration"
 )
 
 func init() {
@@ -110,7 +109,7 @@ func (p *Parser) Load(iCalContent string) {
 	p.parseICalContent(iCalContent, "")
 }
 
-//  returns the chan for calendar urls
+// returns the chan for calendar urls
 func (p *Parser) GetInputChan() chan string {
 	return p.inputChan
 }
@@ -146,7 +145,7 @@ func (p *Parser) Wait() {
 	p.wg.Wait()
 }
 
-//  get the data from the calendar
+// get the data from the calendar
 func (p *Parser) getICal(url string) (string, error) {
 	re, _ := regexp.Compile(`http(s){0,1}:\/\/`)
 
@@ -173,7 +172,7 @@ func (p *Parser) getICal(url string) (string, error) {
 	}
 
 	//  read the file with the ical data
-	fileContent, errReadFile := ioutil.ReadFile(fileName)
+	fileContent, errReadFile := os.ReadFile(fileName)
 
 	if errReadFile != nil {
 		return "", errReadFile
@@ -183,7 +182,7 @@ func (p *Parser) getICal(url string) (string, error) {
 		os.Remove(fileName)
 	}
 
-	return fmt.Sprintf("%s", fileContent), nil
+	return string(fileContent), nil
 }
 
 // ======================== CALENDAR PARSING ===================
@@ -296,7 +295,7 @@ func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 		event.SetCalendar(cal)
 		event.SetID(event.GenerateEventId())
 
-		cal.SetEvent(*event)
+		cal, _ = cal.SetEvent(*event)
 		p.bufferedChan <- event
 
 		if RepeatRuleApply && event.GetRRule() != "" {
@@ -352,22 +351,18 @@ func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 				days = interval
 				months = 0
 				years = 0
-				break
 			case "WEEKLY":
 				days = 7
 				months = 0
 				years = 0
-				break
 			case "MONTHLY":
 				days = 0
 				months = interval
 				years = 0
-				break
 			case "YEARLY":
 				days = 0
 				months = 0
 				years = interval
-				break
 			}
 
 			// number of current repeats
@@ -397,7 +392,7 @@ func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 								newE.SetID(newE.GenerateEventId())
 								newE.SetSequence(current)
 								if until == nil || (until != nil && until.Format(YmdHis) >= weekDaysStart.Format(YmdHis)) {
-									cal.SetEvent(newE)
+									cal, _ = cal.SetEvent(newE)
 								}
 
 							}
@@ -415,7 +410,7 @@ func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 							newE.SetID(newE.GenerateEventId())
 							newE.SetSequence(current)
 							if until == nil || (until != nil && until.Format(YmdHis) >= weekDaysStart.Format(YmdHis)) {
-								cal.SetEvent(newE)
+								cal, _ = cal.SetEvent(newE)
 							}
 
 						}
@@ -618,7 +613,7 @@ func (p *Parser) parseEventOrganizer(eventData string) *Attendee {
 	return a
 }
 
-//  parse attendee properties
+// parse attendee properties
 func (p *Parser) parseAttendee(attendeeData string) *Attendee {
 
 	a := NewAttendee()

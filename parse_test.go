@@ -2,7 +2,6 @@ package ics
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"reflect"
 	"testing"
@@ -11,7 +10,7 @@ import (
 
 func TestLoadCalendar(t *testing.T) {
 	parser := New()
-	calBytes, err := ioutil.ReadFile("testCalendars/2eventsCal.ics")
+	calBytes, err := os.ReadFile("testCalendars/2eventsCal.ics")
 	if err != nil {
 		t.Errorf("Failed to read calendar file ( %s )", err)
 	}
@@ -176,15 +175,14 @@ func TestParsingNotExistingAndExistingCalendars(t *testing.T) {
 func TestParsingWrongCalendarUrls(t *testing.T) {
 	parser := New()
 	input := parser.GetInputChan()
-	input <- "http://localhost/goTestFails"
+	input <- "http://badurl/goTestFails"
 	parser.Wait()
 
 	parseErrors, err := parser.GetErrors()
 
 	if err != nil {
 		t.Errorf("Failed to wait the parse of the calendars ( %s )", err)
-	}
-	if len(parseErrors) != 1 {
+	} else if len(parseErrors) != 1 {
 		t.Errorf("Expected 1 error, found %d in :\n  %#v", len(parseErrors), parseErrors)
 	}
 

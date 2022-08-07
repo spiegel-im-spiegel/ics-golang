@@ -1,10 +1,11 @@
 package ics
 
 import (
-	"errors"
 	"fmt"
 	"sort"
 	"time"
+
+	"github.com/goark/errs"
 )
 
 type Calendar struct {
@@ -78,7 +79,7 @@ func (c *Calendar) GetTimezone() time.Location {
 	return c.timezone
 }
 
-//  add event to the calendar
+// add event to the calendar
 func (c *Calendar) SetEvent(event Event) (*Calendar, error) {
 	//  lock so that the events array doesn't change its size from other goruote
 	mutex.Lock()
@@ -116,30 +117,30 @@ func (c *Calendar) SetEvent(event Event) (*Calendar, error) {
 	return c, nil
 }
 
-//  get event by id
+// get event by id
 func (c *Calendar) GetEventByID(eventID string) (*Event, error) {
 	event, ok := c.eventByID[eventID]
 	if ok {
 		return event, nil
 	}
-	return nil, errors.New(fmt.Sprintf("There is no event with id %s", eventID))
+	return nil, errs.Wrap(ErrNoEvent, errs.WithContext("eventID", eventID))
 }
 
-//  get event by imported id
+// get event by imported id
 func (c *Calendar) GetEventByImportedID(eventID string) (*Event, error) {
 	event, ok := c.eventByImportedID[eventID]
 	if ok {
 		return event, nil
 	}
-	return nil, errors.New(fmt.Sprintf("There is no event with id %s", eventID))
+	return nil, errs.Wrap(ErrNoEvent, errs.WithContext("eventID", eventID))
 }
 
-//  get all events in the calendar
+// get all events in the calendar
 func (c *Calendar) GetEvents() []Event {
 	return c.events
 }
 
-//  get all events in the calendar ordered by date
+// get all events in the calendar ordered by date
 func (c *Calendar) GetEventsByDates() map[string][]*Event {
 	return c.eventsByDate
 }
@@ -152,7 +153,7 @@ func (c *Calendar) GetEventsByDate(dateTime time.Time) ([]*Event, error) {
 	if ok {
 		return events, nil
 	}
-	return nil, errors.New(fmt.Sprintf("There are no events for the day %s", day.Format(YmdHis)))
+	return nil, errs.Wrap(ErrNoEventDay, errs.WithContext("day", day.Format(YmdHis)))
 }
 
 // GetUpcomingEvents returns the next n-Events.
