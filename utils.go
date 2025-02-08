@@ -1,6 +1,7 @@
 package ics
 
 import (
+	"context"
 	"fmt"
 	"io"
 	"os"
@@ -13,7 +14,6 @@ import (
 )
 
 var mutex *sync.Mutex
-var idCounter int
 
 // if DeleteTempFiles is true , after we download ics and parse it , the local temp file  will be deleted
 var DeleteTempFiles bool
@@ -65,7 +65,7 @@ func downloadFromUrl(url string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	response, err := fetch.New().Get(u)
+	response, err := fetch.New().GetWithContext(context.Background(), u)
 	if err != nil {
 		return "", err
 	}

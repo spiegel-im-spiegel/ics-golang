@@ -194,7 +194,6 @@ func (p *Parser) parseICalContent(iCalContent, url string) {
 
 	// split the data into calendar info and events data
 	eventsData, calInfo := explodeICal(iCalContent)
-	idCounter++
 
 	// fill the calendar fields
 	ical.SetName(p.parseICalName(calInfo))
@@ -391,7 +390,7 @@ func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 								newE.SetEnd(weekDaysEnd)
 								newE.SetID(newE.GenerateEventId())
 								newE.SetSequence(current)
-								if until == nil || (until != nil && until.Format(YmdHis) >= weekDaysStart.Format(YmdHis)) {
+								if until == nil || until.Format(YmdHis) >= weekDaysStart.Format(YmdHis) {
 									cal, _ = cal.SetEvent(newE)
 								}
 
@@ -409,7 +408,7 @@ func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 							newE.SetEnd(weekDaysEnd)
 							newE.SetID(newE.GenerateEventId())
 							newE.SetSequence(current)
-							if until == nil || (until != nil && until.Format(YmdHis) >= weekDaysStart.Format(YmdHis)) {
+							if until == nil || until.Format(YmdHis) >= weekDaysStart.Format(YmdHis) {
 								cal, _ = cal.SetEvent(newE)
 							}
 
