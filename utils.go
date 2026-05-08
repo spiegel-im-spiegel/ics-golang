@@ -5,11 +5,13 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/goark/errs"
 	"github.com/goark/fetch"
 )
 
@@ -40,7 +42,7 @@ const YmdHis = "2006-01-02 15:04:05"
 const IcsFormatWholeDay = "20060102"
 
 // downloads the calendar before parsing it
-func downloadFromUrl(url string) (string, error) {
+func downloadFromUrl(url string) (fname string, err error) {
 	// split the url to get the name of the file (like basic.ics)
 	tokens := strings.Split(url, "/")
 
@@ -48,38 +50,45 @@ func downloadFromUrl(url string) (string, error) {
 	fileName := fmt.Sprintf("%s%s_%s", FilePath, time.Now().Format(uts), tokens[len(tokens)-1])
 
 	// creates the path
-	if err := os.MkdirAll(FilePath, 0777); err != nil {
-		return "", err
+	if err = os.MkdirAll(filepath.Clean(FilePath), 0750); err != nil {
+		return
 	}
 
 	// creates the file in the path folder
-	output, err := os.Create(fileName)
-	if err != nil {
-		return "", err
+	output, ferr := os.Create(filepath.Clean(fileName))
+	if ferr != nil {
+		err = ferr
+		return
 	}
 	// close the file
-	defer output.Close()
+	defer func() {
+		err = errs.Join(err, output.Close())
+	}()
 
 	// get the URL
-	u, err := fetch.URL(url)
-	if err != nil {
-		return "", err
+	u, ferr := fetch.URL(url)
+	if ferr != nil {
+		err = ferr
+		return
 	}
-	response, err := fetch.New().GetWithContext(context.Background(), u)
-	if err != nil {
-		return "", err
+	response, ferr := fetch.New().GetWithContext(context.Background(), u)
+	if ferr != nil {
+		err = ferr
+		return
 	}
 	// close the response body
-	defer response.Close()
+	defer func() {
+		err = errs.Join(err, response.Close())
+	}()
 
 	// copy the response from the url to the temp local file
-	_, err = io.Copy(output, response.Body())
-	if err != nil {
-		return "", err
+	if _, cerr := io.Copy(output, response.Body()); cerr != nil {
+		err = cerr
 	}
 
 	//return the file that contains the info
-	return fileName, nil
+	fname = fileName
+	return
 }
 
 func stringToByte(str string) []byte {

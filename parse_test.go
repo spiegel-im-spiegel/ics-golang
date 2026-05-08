@@ -203,12 +203,13 @@ func TestCreatingTempDir(t *testing.T) {
 	input := parser.GetInputChan()
 	input <- "https://www.google.com/calendar/ical/yordanpulov%40gmail.com/private-81525ac0eb14cdc2e858c15e1b296a1c/basic.ics"
 	parser.Wait()
-	_, err := os.Stat(FilePath)
-	if err != nil {
+	if _, err := os.Stat(FilePath); err != nil {
 		t.Errorf("Failed to create %s", FilePath)
 	}
 	// remove the new dir
-	os.Remove(FilePath)
+	if err := os.Remove(FilePath); err != nil {
+		t.Errorf("Failed to remove %s", FilePath)
+	}
 	// return the var to default
 	FilePath = "tmp/"
 }

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"path/filepath"
 	"regexp"
 	"strconv"
 	"strings"
@@ -122,7 +123,7 @@ func (p *Parser) GetOutputChan() chan *Event {
 // returns the chan where will be received events
 func (p *Parser) GetCalendars() ([]*Calendar, error) {
 	if !p.Done() {
-		return nil, errors.New("Calendars not parsed")
+		return nil, errors.New("calendars not parsed")
 	}
 	return p.parsedCalendars, nil
 }
@@ -130,7 +131,7 @@ func (p *Parser) GetCalendars() ([]*Calendar, error) {
 // returns the array with the errors occurred while parsing the events
 func (p *Parser) GetErrors() ([]error, error) {
 	if !p.Done() {
-		return nil, errors.New("Calendars not parsed")
+		return nil, errors.New("calendars not parsed")
 	}
 	return p.errorsOccured, nil
 }
@@ -172,14 +173,16 @@ func (p *Parser) getICal(url string) (string, error) {
 	}
 
 	//  read the file with the ical data
-	fileContent, errReadFile := os.ReadFile(fileName)
+	fileContent, errReadFile := os.ReadFile(filepath.Clean(fileName))
 
 	if errReadFile != nil {
 		return "", errReadFile
 	}
 
 	if DeleteTempFiles && re.FindString(url) != "" {
-		os.Remove(fileName)
+		if err := os.Remove(fileName); err != nil {
+			return "", err
+		}
 	}
 
 	return string(fileContent), nil
@@ -450,7 +453,7 @@ func (p *Parser) parseEventStatus(eventData string) string {
 func (p *Parser) parseEventDescription(eventData string) string {
 	re, _ := regexp.Compile(`DESCRIPTION:.*?\n(?:\s+.*?\n)*`)
 	result := re.FindString(eventData)
-	return trimField(strings.Replace(result, "\r\n ", "", -1), "DESCRIPTION:")
+	return trimField(strings.ReplaceAll(result, "\r\n ", ""), "DESCRIPTION:")
 }
 
 // parses the event id provided form google
@@ -508,7 +511,7 @@ func (p *Parser) parseTimeField(fieldName string, eventData string) (time.Time, 
 	} else {
 		// event that has start hour and minute
 		result := re.FindStringSubmatch(eventData)
-		if result == nil || len(result) < 4 {
+		if len(result) < 4 {
 			return t, tzID
 		}
 		tzID = result[2]
