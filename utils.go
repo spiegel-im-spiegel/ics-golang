@@ -2,14 +2,12 @@ package ics
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"os"
 	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/goark/errs"
 	"github.com/goark/fetch"
@@ -29,9 +27,6 @@ var RepeatRuleApply bool
 // max of the rrule repeat for single event
 var MaxRepeats int
 
-// unixtimestamp
-const uts = "1136239445"
-
 // ics date time format
 const IcsFormat = "20060102T150405Z"
 
@@ -43,27 +38,21 @@ const IcsFormatWholeDay = "20060102"
 
 // downloads the calendar before parsing it
 func downloadFromUrl(ctx context.Context, url string) (fname string, err error) {
-	// split the url to get the name of the file (like basic.ics)
-	tokens := strings.Split(url, "/")
-
-	// create the name of the file
-	fileName := fmt.Sprintf("%s%s_%s", FilePath, time.Now().Format(uts), tokens[len(tokens)-1])
-
-	// creates the path
-	if err = os.MkdirAll(filepath.Clean(FilePath), 0750); err != nil {
+	dir := filepath.Clean(FilePath)
+	if err = os.MkdirAll(dir, 0750); err != nil {
 		return
 	}
 
-	// creates the file in the path folder
-	output, ferr := os.Create(filepath.Clean(fileName))
+	output, ferr := os.CreateTemp(dir, "ics-*.ics")
 	if ferr != nil {
 		err = ferr
 		return
 	}
+	fileName := output.Name()
 	defer func() {
 		err = errs.Join(err, output.Close())
 		if err != nil {
-			err = errs.Join(err, os.Remove(filepath.Clean(fileName)))
+			err = errs.Join(err, os.Remove(fileName))
 		}
 	}()
 
