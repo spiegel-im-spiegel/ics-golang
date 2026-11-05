@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"path/filepath"
 	"reflect"
 	"testing"
 	"time"
@@ -92,6 +93,55 @@ func TestParserContextCancellation(t *testing.T) {
 	}
 	if len(parseErrors) != 1 || !errors.Is(parseErrors[0], context.Canceled) {
 		t.Fatalf("expected context cancellation error, got %v", parseErrors)
+	}
+}
+
+func TestDownloadFromURLCreatesUniqueFiles(t *testing.T) {
+	previousFilePath := FilePath
+	FilePath = t.TempDir()
+	t.Cleanup(func() {
+		FilePath = previousFilePath
+	})
+
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("calendar data"))
+	}))
+	defer server.Close()
+
+	type result struct {
+		fileName string
+		err      error
+	}
+	start := make(chan struct{})
+	results := make(chan result, 2)
+	for i := 0; i < cap(results); i++ {
+		go func() {
+			<-start
+			fileName, err := downloadFromUrl(context.Background(), server.URL+"/basic.ics")
+			results <- result{fileName: fileName, err: err}
+		}()
+	}
+	close(start)
+
+	first := <-results
+	second := <-results
+	if first.err != nil {
+		t.Fatalf("first download failed: %v", first.err)
+	}
+	if second.err != nil {
+		t.Fatalf("second download failed: %v", second.err)
+	}
+	if first.fileName == second.fileName {
+		t.Fatalf("downloads used the same temporary file: %q", first.fileName)
+	}
+	for _, fileName := range []string{first.fileName, second.fileName} {
+		content, err := os.ReadFile(filepath.Clean(fileName))
+		if err != nil {
+			t.Fatalf("failed to read downloaded file %q: %v", fileName, err)
+		}
+		if string(content) != "calendar data" {
+			t.Errorf("unexpected content in %q: %q", fileName, content)
+		}
 	}
 }
 
