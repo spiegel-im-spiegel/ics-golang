@@ -42,7 +42,7 @@ const YmdHis = "2006-01-02 15:04:05"
 const IcsFormatWholeDay = "20060102"
 
 // downloads the calendar before parsing it
-func downloadFromUrl(url string) (fname string, err error) {
+func downloadFromUrl(ctx context.Context, url string) (fname string, err error) {
 	// split the url to get the name of the file (like basic.ics)
 	tokens := strings.Split(url, "/")
 
@@ -60,9 +60,11 @@ func downloadFromUrl(url string) (fname string, err error) {
 		err = ferr
 		return
 	}
-	// close the file
 	defer func() {
 		err = errs.Join(err, output.Close())
+		if err != nil {
+			err = errs.Join(err, os.Remove(filepath.Clean(fileName)))
+		}
 	}()
 
 	// get the URL
@@ -71,7 +73,7 @@ func downloadFromUrl(url string) (fname string, err error) {
 		err = ferr
 		return
 	}
-	response, ferr := fetch.New().GetWithContext(context.Background(), u)
+	response, ferr := fetch.New().GetWithContext(ctx, u)
 	if ferr != nil {
 		err = ferr
 		return
@@ -85,9 +87,14 @@ func downloadFromUrl(url string) (fname string, err error) {
 	if _, cerr := io.Copy(output, response.Body()); cerr != nil {
 		err = cerr
 	}
+	if err == nil {
+		err = ctx.Err()
+	}
 
 	//return the file that contains the info
-	fname = fileName
+	if err == nil {
+		fname = fileName
+	}
 	return
 }
 

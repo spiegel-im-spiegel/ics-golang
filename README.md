@@ -13,13 +13,18 @@ Golang ics parser
 * Import the package:
 ```go
 import (
+    "context"
     "github.com/spiegel-im-spiegel/ics-golang"
 )
 ```
 * Create a new parser:
 ```go
-    parser := ics.New()
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    parser := ics.New(ctx)
 ```
+Cancel the context to stop accepting calendars, cancel in-flight downloads, stop parsing, and close the output channel.
+When sending to the input channel, select on `ctx.Done()` as well so the sender does not block after cancellation.
 * Pass as many ics urls as you want to the input chan :
 ```go
     parserChan := parser.GetInputChan()
