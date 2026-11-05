@@ -24,14 +24,19 @@ import (
     parser := ics.New(ctx)
 ```
 Cancel the context to stop accepting calendars, cancel in-flight downloads, stop parsing, and close the output channel.
-When sending to the input channel, select on `ctx.Done()` as well so the sender does not block after cancellation.
-* Pass as many ics urls as you want to the input chan :
+* Submit as many ics urls as you want:
 ```go
-    parserChan := parser.GetInputChan()
-    parserChan <- "http://www.google.com/calendar/ical/bg.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
-    parserChan <- "http://www.google.com/calendar/ical/en.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
-    parserChan <- "http://www.google.com/calendar/ical/de.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
+    for _, url := range []string{
+        "http://www.google.com/calendar/ical/bg.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics",
+        "http://www.google.com/calendar/ical/en.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics",
+        "http://www.google.com/calendar/ical/de.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics",
+    } {
+        if err := parser.Submit(url); err != nil {
+            return err
+        }
+    }
 ```
+`Submit` registers each URL before returning, so `Wait` can safely wait for all submitted calendars.
 
 ###### * don't rely that the calendars will be parsed in this order
 

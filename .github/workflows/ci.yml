@@ -30,6 +30,9 @@ jobs:
       - name: Test module
         run: go test -shuffle on ./...
 
+      - name: Test module with race detector (requires CGO)
+        run: go test -race -shuffle on ./...
+
   govulncheck:
     name: govulncheck
     runs-on: ubuntu-latest
