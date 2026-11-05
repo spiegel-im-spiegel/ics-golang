@@ -13,20 +13,30 @@ Golang ics parser
 * Import the package:
 ```go
 import (
+    "context"
     "github.com/spiegel-im-spiegel/ics-golang"
 )
 ```
 * Create a new parser:
 ```go
-    parser := ics.New()
+    ctx, cancel := context.WithCancel(context.Background())
+    defer cancel()
+    parser := ics.New(ctx)
 ```
-* Pass as many ics urls as you want to the input chan :
+Cancel the context to stop accepting calendars, cancel in-flight downloads, stop parsing, and close the output channel.
+* Submit as many ics urls as you want:
 ```go
-    parserChan := parser.GetInputChan()
-    parserChan <- "http://www.google.com/calendar/ical/bg.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
-    parserChan <- "http://www.google.com/calendar/ical/en.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
-    parserChan <- "http://www.google.com/calendar/ical/de.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics"
+    for _, url := range []string{
+        "http://www.google.com/calendar/ical/bg.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics",
+        "http://www.google.com/calendar/ical/en.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics",
+        "http://www.google.com/calendar/ical/de.bulgarian%23holiday%40group.v.calendar.google.com/public/basic.ics",
+    } {
+        if err := parser.Submit(url); err != nil {
+            return err
+        }
+    }
 ```
+`Submit` registers each URL before returning, so `Wait` can safely wait for all submitted calendars.
 
 ###### * don't rely that the calendars will be parsed in this order
 

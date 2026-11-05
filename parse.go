@@ -1,6 +1,7 @@
 package ics
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"os"
@@ -23,7 +24,10 @@ func init() {
 }
 
 type Parser struct {
+	mu              sync.RWMutex
+	ctx             context.Context
 	inputChan       chan string
+	submitChan      chan string
 	outputChan      chan *Event
 	bufferedChan    chan *Event
 	errorsOccured   []error
@@ -31,12 +35,15 @@ type Parser struct {
 	parsedEvents    []*Event
 	statusCalendars int
 	wg              *sync.WaitGroup
+	workerWG        sync.WaitGroup
 }
 
 // creates new parser
-func New() *Parser {
+func New(ctx context.Context) *Parser {
 	p := new(Parser)
+	p.ctx = ctx
 	p.inputChan = make(chan string)
+	p.submitChan = make(chan string)
 	p.outputChan = make(chan *Event)
 	p.bufferedChan = make(chan *Event)
 	p.errorsOccured = []error{}
@@ -45,59 +52,47 @@ func New() *Parser {
 	p.parsedEvents = []*Event{}
 
 	// buffers the events output chan
+	p.workerWG.Add(1)
 	go func() {
+		defer p.workerWG.Done()
+		defer close(p.outputChan)
 		for {
 			if len(p.parsedEvents) > 0 {
 				select {
+				case <-ctx.Done():
+					return
 				case p.outputChan <- p.parsedEvents[0]:
 					p.parsedEvents = p.parsedEvents[1:]
 				case event := <-p.bufferedChan:
 					p.parsedEvents = append(p.parsedEvents, event)
 				}
 			} else {
-				event := <-p.bufferedChan
-				p.parsedEvents = append(p.parsedEvents, event)
+				select {
+				case <-ctx.Done():
+					return
+				case event := <-p.bufferedChan:
+					p.parsedEvents = append(p.parsedEvents, event)
+				}
 			}
 		}
 	}()
 
+	p.workerWG.Add(1)
 	go func(input chan string) {
-		// endless loop for getting the ics urls
+		defer p.workerWG.Done()
 		for {
-			link := <-input
-
-			// mark calendar in the wait group as not parsed
-			p.wg.Add(1)
-
-			// marks that we have statusCalendars +1 calendars to be parsed
-			mutex.Lock()
-			p.statusCalendars++
-			mutex.Unlock()
-
-			go func(link string) {
-				// mark calendar in the wait group as  parsed
-				defer p.wg.Done()
-
-				iCalContent, err := p.getICal(link)
-				if err != nil {
-					p.errorsOccured = append(p.errorsOccured, err)
-
-					mutex.Lock()
-					// marks that we have parsed 1 calendar and we have statusCalendars -1 left to be parsed
-					p.statusCalendars--
-					mutex.Unlock()
+			select {
+			case <-ctx.Done():
+				return
+			case received, ok := <-input:
+				if !ok {
 					return
 				}
-
-				// parse the ICal calendar
-				p.parseICalContent(iCalContent, link)
-
-				mutex.Lock()
-				// marks that we have parsed 1 calendar and we have statusCalendars -1 left to be parsed
-				p.statusCalendars--
-				mutex.Unlock()
-
-			}(link)
+				p.registerCalendar()
+				p.parseCalendar(received)
+			case link := <-p.submitChan:
+				p.parseCalendar(link)
+			}
 		}
 	}(p.inputChan)
 	// p.wg.Wait()
@@ -105,14 +100,62 @@ func New() *Parser {
 	return p
 }
 
+func (p *Parser) registerCalendar() {
+	p.wg.Add(1)
+	p.mu.Lock()
+	p.statusCalendars++
+	p.mu.Unlock()
+}
+
+func (p *Parser) finishCalendar() {
+	p.mu.Lock()
+	p.statusCalendars--
+	p.mu.Unlock()
+}
+
+func (p *Parser) parseCalendar(link string) {
+	go func() {
+		defer p.wg.Done()
+		defer p.finishCalendar()
+
+		iCalContent, err := p.getICal(p.ctx, link)
+		if err != nil {
+			p.mu.Lock()
+			p.errorsOccured = append(p.errorsOccured, err)
+			p.mu.Unlock()
+			return
+		}
+		if p.ctx.Err() != nil {
+			return
+		}
+		p.parseICalContent(iCalContent, link)
+	}()
+}
+
 // Load calender from content
 func (p *Parser) Load(iCalContent string) {
 	p.parseICalContent(iCalContent, "")
 }
 
-// returns the chan for calendar urls
+// Deprecated: use Submit so Wait can account for each URL before it is queued.
 func (p *Parser) GetInputChan() chan string {
 	return p.inputChan
+}
+
+// Submit queues a calendar URL and registers it before returning.
+func (p *Parser) Submit(url string) error {
+	if err := p.ctx.Err(); err != nil {
+		return err
+	}
+	p.registerCalendar()
+	select {
+	case <-p.ctx.Done():
+		p.finishCalendar()
+		p.wg.Done()
+		return p.ctx.Err()
+	case p.submitChan <- url:
+		return nil
+	}
 }
 
 // returns the chan where will be received events
@@ -122,32 +165,43 @@ func (p *Parser) GetOutputChan() chan *Event {
 
 // returns the chan where will be received events
 func (p *Parser) GetCalendars() ([]*Calendar, error) {
-	if !p.Done() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.statusCalendars != 0 {
 		return nil, errors.New("calendars not parsed")
 	}
-	return p.parsedCalendars, nil
+	calendars := append([]*Calendar(nil), p.parsedCalendars...)
+	return calendars, nil
 }
 
 // returns the array with the errors occurred while parsing the events
 func (p *Parser) GetErrors() ([]error, error) {
-	if !p.Done() {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
+	if p.statusCalendars != 0 {
 		return nil, errors.New("calendars not parsed")
 	}
-	return p.errorsOccured, nil
+	parseErrors := append([]error(nil), p.errorsOccured...)
+	return parseErrors, nil
 }
 
 // is everything is parsed
 func (p *Parser) Done() bool {
+	p.mu.RLock()
+	defer p.mu.RUnlock()
 	return p.statusCalendars == 0
 }
 
-// wait until everything is parsed
+// Wait blocks until all registered calendars are parsed. Submit all calendars before calling Wait.
 func (p *Parser) Wait() {
 	p.wg.Wait()
 }
 
 // get the data from the calendar
-func (p *Parser) getICal(url string) (string, error) {
+func (p *Parser) getICal(ctx context.Context, url string) (string, error) {
+	if err := ctx.Err(); err != nil {
+		return "", err
+	}
 	re, _ := regexp.Compile(`http(s){0,1}:\/\/`)
 
 	var fileName string
@@ -155,7 +209,7 @@ func (p *Parser) getICal(url string) (string, error) {
 
 	if re.FindString(url) != "" {
 		// download the file and store it local
-		fileName, errDownload = downloadFromUrl(url)
+		fileName, errDownload = downloadFromUrl(ctx, url)
 
 		if errDownload != nil {
 			return "", errDownload
@@ -178,6 +232,12 @@ func (p *Parser) getICal(url string) (string, error) {
 	if errReadFile != nil {
 		return "", errReadFile
 	}
+	if err := ctx.Err(); err != nil {
+		if DeleteTempFiles && re.FindString(url) != "" {
+			_ = os.Remove(fileName)
+		}
+		return "", err
+	}
 
 	if DeleteTempFiles && re.FindString(url) != "" {
 		if err := os.Remove(fileName); err != nil {
@@ -192,8 +252,13 @@ func (p *Parser) getICal(url string) (string, error) {
 
 // parses the iCal formated string to a calendar object
 func (p *Parser) parseICalContent(iCalContent, url string) {
+	if p.ctx.Err() != nil {
+		return
+	}
 	ical := NewCalendar()
+	p.mu.Lock()
 	p.parsedCalendars = append(p.parsedCalendars, ical)
+	p.mu.Unlock()
 
 	// split the data into calendar info and events data
 	eventsData, calInfo := explodeICal(iCalContent)
@@ -253,7 +318,9 @@ func (p *Parser) parseICalTimezone(iCalContent string) time.Location {
 
 	// if fails with the timezone => go Local
 	if err != nil {
+		p.mu.Lock()
 		p.errorsOccured = append(p.errorsOccured, err)
+		p.mu.Unlock()
 		loc, _ = time.LoadLocation("UTC")
 	}
 	return *loc
@@ -264,6 +331,9 @@ func (p *Parser) parseICalTimezone(iCalContent string) time.Location {
 // parses the iCal events Data
 func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 	for _, eventData := range eventsData {
+		if p.ctx.Err() != nil {
+			return
+		}
 		event := NewEvent()
 
 		start, startTZID := p.parseEventStart(eventData)
@@ -298,7 +368,11 @@ func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 		event.SetID(event.GenerateEventId())
 
 		cal, _ = cal.SetEvent(*event)
-		p.bufferedChan <- event
+		select {
+		case <-p.ctx.Done():
+			return
+		case p.bufferedChan <- event:
+		}
 
 		if RepeatRuleApply && event.GetRRule() != "" {
 
@@ -375,6 +449,9 @@ func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 
 			// loops by freq
 			for {
+				if p.ctx.Err() != nil {
+					return
+				}
 				weekDaysStart := freqDateStart
 				weekDaysEnd := freqDateEnd
 
@@ -384,6 +461,9 @@ func (p *Parser) parseEvents(cal *Calendar, eventsData []string) {
 					if byday != "" {
 						// loops the weekdays
 						for i := 0; i < 7; i++ {
+							if p.ctx.Err() != nil {
+								return
+							}
 							day := parseDayNameToIcsName(weekDaysStart.Format("Mon"))
 							if strings.Contains(byday, day) && weekDaysStart != start {
 								current++

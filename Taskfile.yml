@@ -18,6 +18,14 @@ tasks:
       - ./go.mod
       - '**/*.go'
 
+  test-race:
+    desc: Run all tests with the Go race detector (requires CGO).
+    cmds:
+      - go test -race -shuffle on ./...
+    sources:
+      - ./go.mod
+      - '**/*.go'
+
   govulncheck:
     desc: Check reachable vulnerabilities with latest govulncheck.
     cmds:
